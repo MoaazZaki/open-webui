@@ -1,0 +1,29 @@
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim-buster
+
+# Set the working directory in the container to /app
+WORKDIR /app
+
+# Copy the current directory contents into the container at /app
+COPY ./embedder_server.py /app
+COPY ./embedder_init.py /app
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir \
+    fastapi==0.111.0 \
+    uvicorn[standard]==0.29.0 \
+    pydantic==2.7.1 \
+    hf_hub_ctranslate2[sentence_transformers]==2.12.0 \
+    ctranslate2==4.2.1 \
+    optimum[onnxruntime]==1.19.2 \
+    infinity-emb==0.0.32 \
+    langchain-text-splitters
+
+
+RUN python embedder_init.py
+
+# Make port 80 available to the world outside this container
+EXPOSE 80
+
+# Run app.py when the container launches
+CMD ["uvicorn", "embedder_server:app", "--host", "0.0.0.0", "--port", "80"]

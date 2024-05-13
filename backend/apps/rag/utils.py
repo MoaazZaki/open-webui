@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 import requests
@@ -19,11 +20,14 @@ from langchain.retrievers import (
 )
 
 from typing import Optional
-from config import SRC_LOG_LEVELS, CHROMA_CLIENT
+from config import SRC_LOG_LEVELS, CHROMA_CLIENT, VECTOR_SEARCH_COLLECTION_NAME, VECTOR_SEARCH_TOP_K
+from db.chroma import ChromaDB
 
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
+
+vector_db = ChromaDB()
 
 
 def query_doc(
@@ -228,7 +232,7 @@ def get_embedding_function(
         return lambda query: generate_multiple(query, func)
 
 
-def rag_messages(
+async def rag_messages(
     docs,
     messages,
     template,
@@ -268,6 +272,7 @@ def rag_messages(
     extracted_collections = []
     relevant_contexts = []
 
+    # Get attachments
     for doc in docs:
         context = None
 
@@ -311,12 +316,29 @@ def rag_messages(
 
         extracted_collections.extend(collection_names)
 
+    # Get from Vector DB
+    vector_search_context = await vector_db.search(
+        query=query,
+        collection_name=VECTOR_SEARCH_COLLECTION_NAME,
+        top_k=VECTOR_SEARCH_TOP_K
+    )
+
+
     context_string = ""
 
     citations = []
-    for context in relevant_contexts:
+    for context in vector_search_context + relevant_contexts:
         try:
-            if "documents" in context:
+            if "text" in context:
+                context_string += f"{context['text']}\n\n"
+                citations.append(
+                    {
+                        "source": context["id"],
+                        "document": context["text"],
+                        "metadata": context["meta_data"]
+                    }
+                )
+            elif "documents" in context:
                 context_string += "\n\n".join(
                     [text for text in context["documents"][0] if text is not None]
                 )
@@ -333,7 +355,6 @@ def rag_messages(
             log.exception(e)
 
     context_string = context_string.strip()
-
     ra_content = rag_template(
         template=template,
         context=context_string,
