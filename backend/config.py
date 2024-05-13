@@ -445,7 +445,7 @@ if WEBUI_AUTH and WEBUI_SECRET_KEY == "":
 CHROMA_DATA_PATH = f"{DATA_DIR}/vector_db"
 CHROMA_TENANT = os.environ.get("CHROMA_TENANT", chromadb.DEFAULT_TENANT)
 CHROMA_DATABASE = os.environ.get("CHROMA_DATABASE", chromadb.DEFAULT_DATABASE)
-CHROMA_HTTP_HOST = os.environ.get("CHROMA_HTTP_HOST", "")
+CHROMA_HTTP_HOST = os.environ.get("CHROMA_HTTP_HOST", "chromadb")
 CHROMA_HTTP_PORT = int(os.environ.get("CHROMA_HTTP_PORT", "8000"))
 # Comma-separated list of header=value pairs
 CHROMA_HTTP_HEADERS = os.environ.get("CHROMA_HTTP_HEADERS", "")
@@ -459,12 +459,16 @@ CHROMA_HTTP_SSL = os.environ.get("CHROMA_HTTP_SSL", "false").lower() == "true"
 # this uses the model defined in the Dockerfile ENV variable. If you dont use docker or docker based deployments such as k8s, the default embedding model will be used (sentence-transformers/all-MiniLM-L6-v2)
 
 RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
+VECTOR_SEARCH_TOP_K = int(os.environ.get("VECTOR_SEARCH_TOP_K", "5"))
+VECTOR_SEARCH_COLLECTION_NAME = os.environ.get("VECTOR_SEARCH_COLLECTION_NAME", "")
 RAG_RELEVANCE_THRESHOLD = float(os.environ.get("RAG_RELEVANCE_THRESHOLD", "0.0"))
 
 ENABLE_RAG_HYBRID_SEARCH = (
     os.environ.get("ENABLE_RAG_HYBRID_SEARCH", "").lower() == "true"
 )
 
+VECTORIZER_HOST = os.environ.get("VECTORIZER_HOST", "localhost")
+VECTORIZER_PORT = os.environ.get("VECTORIZER_PORT", "3434")
 
 ENABLE_RAG_WEB_LOADER_SSL_VERIFICATION = (
     os.environ.get("ENABLE_RAG_WEB_LOADER_SSL_VERIFICATION", "True").lower() == "true"
@@ -504,10 +508,10 @@ if CHROMA_HTTP_HOST != "":
     CHROMA_CLIENT = chromadb.HttpClient(
         host=CHROMA_HTTP_HOST,
         port=CHROMA_HTTP_PORT,
-        headers=CHROMA_HTTP_HEADERS,
-        ssl=CHROMA_HTTP_SSL,
-        tenant=CHROMA_TENANT,
-        database=CHROMA_DATABASE,
+        # headers=CHROMA_HTTP_HEADERS,
+        # ssl=CHROMA_HTTP_SSL,
+        # tenant=CHROMA_TENANT,
+        # database=CHROMA_DATABASE,
         settings=Settings(allow_reset=True, anonymized_telemetry=False),
     )
 else:
@@ -517,7 +521,8 @@ else:
         tenant=CHROMA_TENANT,
         database=CHROMA_DATABASE,
     )
-
+print("CHROMA CONNECTION", CHROMA_CLIENT)
+log.info(CHROMA_CLIENT)
 
 # device type embedding models - "cpu" (default), "cuda" (nvidia gpu required) or "mps" (apple silicon) - choosing this right can lead to better performance
 USE_CUDA = os.environ.get("USE_CUDA_DOCKER", "false")

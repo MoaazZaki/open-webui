@@ -1,14 +1,80 @@
 version: '3.8'
 
 services:
+  chromadb:
+    image: chromadb/chroma:0.5.1.dev92
+    volumes:
+      # Be aware that indexed data are located in "/chroma/chroma/"
+      # Default configuration for persist_directory in chromadb/config.py
+      # Read more about deployments: https://docs.trychroma.com/deployment
+      - chroma-data:/chroma/chroma
+    command: "--workers 1 --host 0.0.0.0 --port 8000 --proxy-headers --log-config chromadb/log_config.yml --timeout-keep-alive 30"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=${PERSIST_DIRECTORY:-/chroma/chroma}
+    restart: unless-stopped # possible values are: "no", always", "on-failure", "unless-stopped"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # Adjust below to match your container port
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - net
+
   ollama:
     volumes:
       - ollama:/root/.ollama
+    networks:
+      - net
     container_name: ollama
     pull_policy: always
     tty: true
     restart: unless-stopped
     image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+
+
+  embedding_server:
+    build: 
+      context: .
+      dockerfile: dockerfile.embedder
+    environment:
+      - 'MODEL_NAME=intfloat/multilingual-e5-base'
+      - 'DEVICE=cpu'
+      - 'BATCH_SIZE=32'
+      - 'MODEL_ENGINE=optimum'
+      - 'DTYPE=int8'
+    ports:
+      - 8001-8004:80
+    networks:
+      - net
+    volumes:
+      - hfmodels:/data
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
+      restart_policy:
+        condition: on-failure
+
+  embedder_load_balancer:
+    image: nginx:latest
+    container_name: embedder_load_balancer
+    ports:
+      - "3434:80"
+    volumes:
+      - ./ngnix_embedder.conf:/etc/nginx/nginx.conf
+    deploy:
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - embedding_server
+    networks:
+      - net
 
   open-webui:
     build:
@@ -21,12 +87,22 @@ services:
     volumes:
       - open-webui:/app/backend/data
     depends_on:
+      - chromadb
       - ollama
+
     ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
+      - ${OPEN_WEBUI_PORT-3001}:8080
+    networks:
+      - net
     environment:
       - 'OLLAMA_BASE_URL=http://ollama:11434'
       - 'WEBUI_SECRET_KEY='
+      - 'VECTORIZER_HOST=http://embedder_load_balancer'
+      - 'VECTORIZER_PORT=80'
+      - 'VECTOR_SEARCH_TOP_K=5'
+      - 'VECTOR_SEARCH_COLLECTION_NAME=test'
+      - 'RAG_TOP_K=2'
+      # - 'CHROMA_HTTP_HOST=http://host.docker.internal'
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
@@ -34,3 +110,12 @@ services:
 volumes:
   ollama: {}
   open-webui: {}
+  chroma-data:
+    driver: local
+  hfmodels:
+    driver: local
+
+
+networks:
+  net:
+    driver: bridge

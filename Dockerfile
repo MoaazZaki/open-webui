@@ -134,4 +134,6 @@ COPY ./backend .
 
 EXPOSE 8080
 
+RUN apt update && apt install curl -y
+
 CMD [ "bash", "start.sh"]

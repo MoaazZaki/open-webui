@@ -92,7 +92,7 @@ https://github.com/open-webui/open-webui
 """
 )
 
-app = FastAPI(docs_url="/docs" if ENV == "dev" else None, redoc_url=None)
+app = FastAPI(debug=True,docs_url="/docs" if ENV == "dev" else None, redoc_url=None)
 
 app.state.ENABLE_MODEL_FILTER = ENABLE_MODEL_FILTER
 app.state.MODEL_FILTER_LIST = MODEL_FILTER_LIST
@@ -124,23 +124,24 @@ class RAGMiddleware(BaseHTTPMiddleware):
 
             # Example: Add a new key-value pair or modify existing ones
             # data["modified"] = True  # Example modification
-            if "docs" in data:
-                data = {**data}
-                data["messages"], citations = rag_messages(
-                    docs=data["docs"],
-                    messages=data["messages"],
-                    template=rag_app.state.RAG_TEMPLATE,
-                    embedding_function=rag_app.state.EMBEDDING_FUNCTION,
-                    k=rag_app.state.TOP_K,
-                    reranking_function=rag_app.state.sentence_transformer_rf,
-                    r=rag_app.state.RELEVANCE_THRESHOLD,
-                    hybrid_search=rag_app.state.ENABLE_RAG_HYBRID_SEARCH,
-                )
+            docs = data.get('docs',[])
+            data = {**data}
+            data["messages"], citations = await rag_messages(
+                docs=docs,
+                messages=data["messages"],
+                template=rag_app.state.RAG_TEMPLATE,
+                embedding_function=rag_app.state.EMBEDDING_FUNCTION,
+                k=rag_app.state.TOP_K,
+                reranking_function=rag_app.state.sentence_transformer_rf,
+                r=rag_app.state.RELEVANCE_THRESHOLD,
+                hybrid_search=rag_app.state.ENABLE_RAG_HYBRID_SEARCH,
+            )
+            if 'docs' in data:
                 del data["docs"]
 
-                log.debug(
-                    f"data['messages']: {data['messages']}, citations: {citations}"
-                )
+            log.debug(
+                f"data['messages']: {data['messages']}, citations: {citations}"
+            )
 
             modified_body_bytes = json.dumps(data).encode("utf-8")
 
